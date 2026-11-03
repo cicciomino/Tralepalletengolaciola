@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Braccio accelerante + esplosione</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #111827; touch-action: none; }
+    #playBtn {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      padding: 18px 42px; font-size: 22px; font-family: system-ui, -apple-system, sans-serif;
+      font-weight: 700; color: #111827; background: #f9fafb;
+      border: none; border-radius: 999px; cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35); z-index: 10;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #playBtn:active { transform: translate(-50%, -50%) scale(0.96); }
+    #info {
+      position: fixed; left: 10px; bottom: 10px; color: #6b7280;
+      font-family: system-ui, sans-serif; font-size: 11px; pointer-events: none;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <button id="playBtn">▶ Play</button>
+  <div id="info">Il braccio accelera per 5 s, poi il personaggio esplode</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // ---------- Scene ----------
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111827);
+
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // ---------- Lights ----------
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
+    dirLight.position.set(4, 6, 3);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024, 1024);
+    dirLight.shadow.camera.left = -5;
+    dirLight.shadow.camera.right = 5;
+    dirLight.shadow.camera.top = 5;
+    dirLight.shadow.camera.bottom = -5;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 25;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0x6b7280, 0.4);
+    fillLight.position.set(-3, 2, -4);
+    scene.add(fillLight);
+
+    // ---------- Floor ----------
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(30, 30),
+      new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 1 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // ---------- Materials ----------
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4f3a, roughness: 0.8 });
+    const mattressMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.9 });
+    const pillowMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.9 });
+    const shirtMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.8 });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.85 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xd6a77a, roughness: 0.75 });
+
+    // ---------- Bed ----------
+    const bedFrame = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.3, 1.45), woodMat);
+    bedFrame.position.set(0, 0.25, 0);
+    bedFrame.castShadow = true; bedFrame.receiveShadow = true;
+    scene.add(bedFrame);
+
+    const mattress = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.3, 1.3), mattressMat);
+    mattress.position.set(0, 0.55, 0);
+    mattress.castShadow = true; mattress.receiveShadow = true;
+    scene.add(mattress);
+
+    const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.13, 0.8), pillowMat);
+    pillow.position.set(0.82, 0.77, 0);
+    pillow.castShadow = true;
+    scene.add(pillow);
+
+    const BED_TOP_Y = 0.7;
+    const BED_HALF_X = 1.175;
+    const BED_HALF_Z = 0.65;
+
+    // ---------- Character ----------
+    const character = new THREE.Group();
+    scene.add(character);
+
+    function capsule(radius, length, material) {
+      const mesh = new THREE.Mesh(
+        new THREE.CapsuleGeometry(radius, length, 8, 16), material
+      );
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    const torso = capsule(0.18, 0.55, shirtMat);
+    torso.rotation.z = Math.PI / 2;
+    torso.position.set(0.1, 0.92, 0);
+    character.add(torso);
+
+    const hips = capsule(0.15, 0.25, pantsMat);
+    hips.rotation.z = Math.PI / 2;
+    hips.position.set(-0.35, 0.9, 0);
+    character.add(hips);
+
+    const legL = capsule(0.085, 0.55, pantsMat);
+    legL.rotation.z = Math.PI / 2;
+    legL.position.set(-0.75, 0.88, -0.13);
+    character.add(legL);
+
+    const legR = capsule(0.085, 0.55, pantsMat);
+    legR.rotation.z = Math.PI / 2;
+    legR.position.set(-0.75, 0.88, 0.13);
+    character.add(legR);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 16), skinMat);
+    head.position.set(0.78, 0.94, 0);
+    head.castShadow = true;
+    character.add(head);
+
+    function createStaticArm(z) {
+      const arm = new THREE.Group();
+      arm.position.set(0.48, 0.94, z);
+
+      const upper = capsule(0.062, 0.3, shirtMat);
+      upper.rotation.z = Math.PI / 2;
+      upper.position.x = -0.16;
+      arm.add(upper);
+
+      const fore = capsule(0.058, 0.3, skinMat);
+      fore.rotation.z = Math.PI / 2;
+      fore.position.x = -0.5;
+      arm.add(fore);
+
+      const h = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 12), skinMat);
+      h.position.x = -0.7;
+      h.castShadow = true;
+      arm.add(h);
+
+      character.add(arm);
+      return arm;
+    }
+    const leftArm = createStaticArm(-0.26);
+
+    const rightArm = new THREE.Group();
+    rightArm.position.set(0.48, 0.94, 0.26);
+    character.add(rightArm);
+
+    const upperArm = capsule(0.062, 0.3, shirtMat);
+    upperArm.rotation.z = Math.PI / 2;
+    upperArm.position.x = -0.16;
+    rightArm.add(upperArm);
+
+    const elbow = new THREE.Group();
+    elbow.position.x = -0.34;
+    rightArm.add(elbow);
+
+    const forearm = capsule(0.058, 0.3, skinMat);
+    forearm.rotation.z = Math.PI / 2;
+    forearm.position.x = -0.16;
+    elbow.add(forearm);
+
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 12), skinMat);
+    hand.position.x = -0.34;
+    hand.castShadow = true;
+    elbow.add(hand);
+
+    // ---------- Motion blur ghosts ----------
+    const AMP = 0.7;
+    const GHOST_COUNT = 14;
+    const BLUR_OPACITY = 0.09;
+
+    const ghosts = [];
+    for (let i = 0; i < GHOST_COUNT; i++) {
+      const ghost = rightArm.clone(true);
+      ghost.traverse(o => {
+        if (o.isMesh) {
+          o.material = o.material.clone();
+          o.material.transparent = true;
+          o.material.opacity = 0;
+          o.material.depthWrite = false;
+          o.castShadow = false;
+          o.receiveShadow = false;
+        }
+      });
+      const t = i / (GHOST_COUNT - 1);
+      ghost.rotation.z = -AMP + t * 2 * AMP;
+      character.add(ghost);
+      ghosts.push(ghost);
+    }
+
+    function setGhostsVisible(visible) {
+      for (const g of ghosts) {
+        g.visible = visible;
+        g.traverse(o => {
+          if (o.isMesh) o.material.opacity = visible ? BLUR_OPACITY : 0;
+        });
+      }
+    }
+
+    // ---------- Track parts for reset ----------
+    const trackedParts = [torso, hips, legL, legR, head, leftArm, rightArm];
+    const originalStates = new Map();
+    for (const p of trackedParts) {
+      originalStates.set(p, {
+        parent: p.parent,
+        position: p.position.clone(),
+        quaternion: p.quaternion.clone(),
+        scale: p.scale.clone()
+      });
+    }
+
+    function resetCharacter() {
+      for (const [part, state] of originalStates) {
+        if (part.parent !== state.parent) state.parent.add(part);
+        part.position.copy(state.position);
+        part.quaternion.copy(state.quaternion);
+        part.scale.copy(state.scale);
+      }
+      elbow.position.set(-0.34, 0, 0);
+      elbow.rotation.set(0, 0, 0);
+      setGhostsVisible(false);
+      explodedParts.length = 0;
+    }
+
+    // ---------- Explosion ----------
+    const explodedParts = [];
+
+    function explodePart(part, vx, vy, vz, radius) {
+      const worldPos = new THREE.Vector3();
+      part.getWorldPosition(worldPos);
+      const worldQuat = new THREE.Quaternion();
+      part.getWorldQuaternion(worldQuat);
+
+      scene.add(part);
+      part.position.copy(worldPos);
+      part.quaternion.copy(worldQuat);
+
+      explodedParts.push({
+        obj: part,
+        vel: new THREE.Vector3(vx, vy, vz),
+        angVel: new THREE.Vector3(
+          (Math.random() - 0.5) * 10,
+          (Math.random() - 0.5) * 10,
+          (Math.random() - 0.5) * 10
+        ),
+        radius,
+        settled: false
+      });
+    }
+
+    function explode() {
+      setGhostsVisible(false);
+      rightArm.rotation.set(0, 0, 0);
+      rightArm.position.set(0.48, 0.94, 0.26);
+      elbow.rotation.set(0, 0, 0);
+
+      explodePart(head,   0.4, 2.8,  0.3, 0.16);
+      explodePart(torso, -0.3, 2.2,  0.6, 0.20);
+      explodePart(hips,  -0.6, 2.0, -0.4, 0.16);
+      explodePart(legL,  -1.2, 1.8, -1.0, 0.10);
+      explodePart(legR,  -1.2, 1.8,  1.0, 0.10);
+      explodePart(leftArm,  0.6, 1.8, -1.5, 0.12);
+      explodePart(rightArm, 0.6, 1.8,  1.5, 0.12);
+    }
+
+    // ---------- Physics ----------
+    const GRAVITY = -9.8;
+    const RESTITUTION = 0.35;
+    const FRICTION = 0.82;
+    const MAX_DIST = 3.0;
+
+    function updateExplosion(delta) {
+      for (const p of explodedParts) {
+        if (p.settled) continue;
+
+        p.vel.y += GRAVITY * delta;
+        p.obj.position.addScaledVector(p.vel, delta);
+
+        p.obj.rotation.x += p.angVel.x * delta;
+        p.obj.rotation.y += p.angVel.y * delta;
+        p.obj.rotation.z += p.angVel.z * delta;
+
+        if (Math.abs(p.obj.position.x) > MAX_DIST) {
+          p.vel.x *= -0.5;
+          p.obj.position.x = Math.sign(p.obj.position.x) * MAX_DIST;
+        }
+        if (Math.abs(p.obj.position.z) > MAX_DIST) {
+          p.vel.z *= -0.5;
+          p.obj.position.z = Math.sign(p.obj.position.z) * MAX_DIST;
+        }
+
+        const onBed = Math.abs(p.obj.position.x) < BED_HALF_X
+                   && Math.abs(p.obj.position.z) < BED_HALF_Z;
+        const surfaceY = onBed ? BED_TOP_Y : 0;
+        const restY = surfaceY + p.radius;
+
+        if (p.obj.position.y < restY) {
+          p.obj.position.y = restY;
+          if (p.vel.y < 0) {
+            if (Math.abs(p.vel.y) < 0.6) {
+              p.vel.y = 0;
+              p.vel.x *= FRICTION;
+              p.vel.z *= FRICTION;
+              p.angVel.multiplyScalar(0.65);
+              if (p.vel.lengthSq() < 0.02 && p.angVel.lengthSq() < 0.5) {
+                p.settled = true;
+                p.vel.set(0, 0, 0);
+                p.angVel.set(0, 0, 0);
+              }
+            } else {
+              p.vel.y = -p.vel.y * RESTITUTION;
+            }
+          }
+        }
+      }
+    }
+
+    // ---------- Camera (portrait-friendly) ----------
+    function updateCamera() {
+      const aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = aspect;
+
+      const baseFov = 55;
+      let fov = baseFov;
+      if (aspect < 1) fov = Math.min(baseFov / aspect * 0.85, 80);
+      camera.fov = fov;
+
+      camera.position.set(2.8, 3.0, 4.2);
+      camera.lookAt(0, 0.55, 0);
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // ---------- State machine ----------
+    const playBtn = document.getElementById('playBtn');
+    const clock = new THREE.Clock();
+
+    const DURATION_ARM = 5;
+    const FREQ_START = 6;    // Hz iniziale
+    const FREQ_END   = 900;  // Hz finale (matematica; visivamente aliased)
+
+    let state = 'idle';
+    let elapsed = 0;
+    let armPhase = 0;
+    let explodeElapsed = 0;
+    let settleHoldTimer = 0;
+
+    function startPlay() {
+      resetCharacter();
+      state = 'arm';
+      elapsed = 0;
+      armPhase = 0;
+      setGhostsVisible(true);
+      playBtn.style.display = 'none';
+    }
+
+    playBtn.addEventListener('click', startPlay);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.05);
+
+      if (state === 'arm') {
+        elapsed += delta;
+        const t = Math.min(elapsed / DURATION_ARM, 1);
+
+        // Frequenza che accelera in modo non lineare
+        const freq = FREQ_START + Math.pow(t, 3) * FREQ_END;
+
+        // Accumulo di fase (fondamentale per frequenza variabile)
+        armPhase += 2 * Math.PI * freq * delta;
+
+        // Ampiezza e jitter crescenti
+        const amp = AMP * (0.55 + t * 0.75);
+        const jitter = 0.003 + t * 0.022;
+
+        rightArm.rotation.z = Math.sin(armPhase) * amp;
+        elbow.rotation.z = Math.sin(armPhase + 0.8) * amp * 0.45;
+
+        rightArm.position.y = 0.94 + (Math.random() - 0.5) * jitter;
+        rightArm.position.z = 0.26 + (Math.random() - 0.5) * jitter;
+
+        // Motion blur sempre più denso
+        const ghostOpacity = BLUR_OPACITY * (0.35 + t * 1.0);
+        for (const g of ghosts) {
+          g.traverse(o => {
+            if (o.isMesh) o.material.opacity = ghostOpacity;
+          });
+        }
+
+        if (elapsed >= DURATION_ARM) {
+          explode();
+          state = 'exploding';
+          explodeElapsed = 0;
+          settleHoldTimer = 0;
+        }
+      } else if (state === 'exploding') {
+        explodeElapsed += delta;
+        updateExplosion(delta);
+
+        const allSettled = explodedParts.length > 0
+          && explodedParts.every(p => p.settled);
+        const timedOut = explodeElapsed > 4;
+
+        if (allSettled || timedOut) {
+          settleHoldTimer += delta;
+          if (settleHoldTimer > 0.7) {
+            resetCharacter();
+            state = 'idle';
+            playBtn.style.display = 'block';
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    updateCamera();
+    resetCharacter();
+    animate();
+
+    window.addEventListener('resize', updateCamera);
+    window.addEventListener('orientationchange', () => setTimeout(updateCamera, 120));
+  </script>
+</body>
+</html>
